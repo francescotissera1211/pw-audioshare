@@ -133,3 +133,105 @@ pub enum UiCommand {
     /// Shutdown the PipeWire thread
     Quit,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- PortDirection ---
+
+    #[test]
+    fn test_port_direction_as_str() {
+        assert_eq!(PortDirection::Input.as_str(), "input");
+        assert_eq!(PortDirection::Output.as_str(), "output");
+    }
+
+    #[test]
+    fn test_port_direction_equality() {
+        assert_eq!(PortDirection::Input, PortDirection::Input);
+        assert_ne!(PortDirection::Input, PortDirection::Output);
+    }
+
+    // --- MediaType ---
+
+    #[test]
+    fn test_media_type_as_str() {
+        assert_eq!(MediaType::Audio.as_str(), "audio");
+        assert_eq!(MediaType::Midi.as_str(), "midi");
+        assert_eq!(MediaType::Video.as_str(), "video");
+        assert_eq!(MediaType::Unknown.as_str(), "unknown");
+    }
+
+    #[test]
+    fn test_media_type_default_is_audio() {
+        assert_eq!(MediaType::default(), MediaType::Audio);
+    }
+
+    #[test]
+    fn test_media_type_from_format_dsp_audio() {
+        assert_eq!(
+            MediaType::from_format_dsp(Some("audio/raw")),
+            MediaType::Audio
+        );
+    }
+
+    #[test]
+    fn test_media_type_from_format_dsp_32bit_float() {
+        assert_eq!(
+            MediaType::from_format_dsp(Some("32 bit float")),
+            MediaType::Audio
+        );
+    }
+
+    #[test]
+    fn test_media_type_from_format_dsp_midi() {
+        assert_eq!(
+            MediaType::from_format_dsp(Some("8 bit raw midi")),
+            MediaType::Midi
+        );
+    }
+
+    #[test]
+    fn test_media_type_from_format_dsp_video() {
+        assert_eq!(
+            MediaType::from_format_dsp(Some("32 bit float RGBA video")),
+            MediaType::Video
+        );
+    }
+
+    #[test]
+    fn test_media_type_from_format_dsp_unknown_string() {
+        assert_eq!(
+            MediaType::from_format_dsp(Some("something else")),
+            MediaType::Unknown
+        );
+    }
+
+    #[test]
+    fn test_media_type_from_format_dsp_none() {
+        assert_eq!(MediaType::from_format_dsp(None), MediaType::Unknown);
+    }
+
+    #[test]
+    fn test_media_type_midi_takes_priority_over_audio() {
+        // "midi" substring check comes first in the match
+        assert_eq!(
+            MediaType::from_format_dsp(Some("audio midi hybrid")),
+            MediaType::Midi
+        );
+    }
+
+    // --- LinkState ---
+
+    #[test]
+    fn test_link_state_as_str() {
+        assert_eq!(LinkState::Active.as_str(), "active");
+        assert_eq!(LinkState::Paused.as_str(), "paused");
+        assert_eq!(LinkState::Error.as_str(), "error");
+    }
+
+    #[test]
+    fn test_link_state_default_is_active() {
+        assert_eq!(LinkState::default(), LinkState::Active);
+    }
+}

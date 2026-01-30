@@ -1470,66 +1470,17 @@ impl Window {
             }
         };
 
-        // Collect links to create (to avoid borrow issues)
-        let links_to_create: Vec<(u32, u32)>;
-        let mut skipped = 0;
+        let total = preset.connections.len();
 
-        {
+        // Find matching port pairs using state-level logic
+        let links_to_create = {
             let pw_state = self.imp().pw_state.borrow();
-            let mut to_create = Vec::new();
+            pw_state.find_preset_matches(&preset.connections)
+        };
 
-            for conn in &preset.connections {
-                // Find output port by node name and port name
-                let output_port = pw_state.ports.values().find(|p| {
-                    p.direction == PortDirection::Output
-                        && p.name == conn.output_port
-                        && pw_state
-                            .nodes
-                            .get(&p.node_id)
-                            .map(|n| n.name == conn.output_node)
-                            .unwrap_or(false)
-                });
-
-                // Find input port by node name and port name
-                let input_port = pw_state.ports.values().find(|p| {
-                    p.direction == PortDirection::Input
-                        && p.name == conn.input_port
-                        && pw_state
-                            .nodes
-                            .get(&p.node_id)
-                            .map(|n| n.name == conn.input_node)
-                            .unwrap_or(false)
-                });
-
-                match (output_port, input_port) {
-                    (Some(out), Some(inp)) => {
-                        // Check if link already exists
-                        let exists = pw_state.links.values().any(|l| {
-                            l.output_port_id == out.id && l.input_port_id == inp.id
-                        });
-
-                        if !exists {
-                            to_create.push((out.id, inp.id));
-                        } else {
-                            skipped += 1;
-                        }
-                    }
-                    _ => {
-                        skipped += 1;
-                        log::debug!(
-                            "Could not find ports for connection: {} -> {}",
-                            conn.output_port,
-                            conn.input_port
-                        );
-                    }
-                }
-            }
-
-            links_to_create = to_create;
-        }
-
-        // Now create the links (pw_state borrow is released)
+        // Now create the links
         let created = links_to_create.len();
+        let skipped = total - created;
         for (output_id, input_id) in links_to_create {
             self.create_link(output_id, input_id);
         }
@@ -1583,54 +1534,20 @@ impl Window {
             }
         };
 
-        // Check each connection in the preset
-        let pw_state = self.imp().pw_state.borrow();
-        let mut links_to_create = Vec::new();
+        // Find matching port pairs using state-level logic
+        let matches = {
+            let pw_state = self.imp().pw_state.borrow();
+            pw_state.find_preset_matches(&preset_connections)
+        };
 
-        for conn in &preset_connections {
-            // Find output port by node name and port name
-            let output_port = pw_state.ports.values().find(|p| {
-                p.direction == PortDirection::Output
-                    && p.name == conn.output_port
-                    && pw_state
-                        .nodes
-                        .get(&p.node_id)
-                        .map(|n| n.name == conn.output_node)
-                        .unwrap_or(false)
-            });
-
-            // Find input port by node name and port name
-            let input_port = pw_state.ports.values().find(|p| {
-                p.direction == PortDirection::Input
-                    && p.name == conn.input_port
-                    && pw_state
-                        .nodes
-                        .get(&p.node_id)
-                        .map(|n| n.name == conn.input_node)
-                        .unwrap_or(false)
-            });
-
-            // If both ports exist and link doesn't already exist, queue it
-            if let (Some(out), Some(inp)) = (output_port, input_port) {
-                let link_key = (out.id, inp.id);
-
-                // Check if link already exists
-                let exists = pw_state
-                    .links
-                    .values()
-                    .any(|l| l.output_port_id == out.id && l.input_port_id == inp.id);
-
-                // Check if link creation is already in-flight
-                let pending = self.imp().pending_links.borrow().contains(&link_key);
-
-                if !exists && !pending {
-                    links_to_create.push(link_key);
-                }
-            }
-        }
-
-        // Release borrow before creating links
-        drop(pw_state);
+        // Filter out already-pending links (UI-layer dedup)
+        let links_to_create: Vec<(u32, u32)> = {
+            let pending = self.imp().pending_links.borrow();
+            matches
+                .into_iter()
+                .filter(|key| !pending.contains(key))
+                .collect()
+        };
 
         // Mark links as pending and create them
         {
