@@ -3,10 +3,10 @@ use std::rc::Rc;
 use std::thread::{self, JoinHandle};
 
 use async_channel::{Receiver, Sender};
-use pipewire::context::Context;
-use pipewire::core::Core;
+use pipewire::context::ContextRc;
+use pipewire::core::CoreRc;
 use pipewire::link::Link;
-use pipewire::main_loop::MainLoop;
+use pipewire::main_loop::MainLoopRc;
 use pipewire::registry::GlobalObject;
 use pipewire::spa::utils::dict::DictRef;
 use pipewire::types::ObjectType;
@@ -64,7 +64,7 @@ impl Drop for PipeWireThread {
 /// State shared within the PipeWire thread
 struct ThreadState {
     event_tx: Sender<PwEvent>,
-    core: Core,
+    core: CoreRc,
     /// Store created links to keep them alive without leaking memory.
     /// The `object.linger = true` property ensures PipeWire keeps the connection
     /// even after the proxy is dropped, but we need to keep the proxy alive
@@ -80,10 +80,10 @@ fn run_pipewire_loop(
     // Initialize PipeWire
     pipewire::init();
 
-    let mainloop = MainLoop::new(None)?;
-    let context = Context::new(&mainloop)?;
-    let core = context.connect(None)?;
-    let registry = core.get_registry()?;
+    let mainloop = MainLoopRc::new(None)?;
+    let context = ContextRc::new(&mainloop, None)?;
+    let core = context.connect_rc(None)?;
+    let registry = core.get_registry_rc()?;
 
     // Shared state for callbacks
     let state = Rc::new(RefCell::new(ThreadState {
